@@ -6,7 +6,8 @@ import shutil
 import tempfile
 import unittest.mock
 
-import beets.util.confit
+import beets
+import confuse
 
 import beetsplug.extrafiles
 
@@ -80,8 +81,8 @@ class BaseTestCase(unittest.TestCase):
         self._create_artwork_files(sourcedir, 'scans')
 
         # Set up plugin instance
-        config = beets.util.confit.RootView(sources=[
-            beets.util.confit.ConfigSource.of(self.PLUGIN_CONFIG),
+        config = confuse.RootView(sources=[
+            confuse.ConfigSource.of(self.PLUGIN_CONFIG),
         ])
 
         with unittest.mock.patch(
@@ -331,8 +332,8 @@ class MultiAlbumTestCase(unittest.TestCase):
             open(logfile, mode='w').close()
 
         # Set up plugin instance
-        config = beets.util.confit.RootView(sources=[
-            beets.util.confit.ConfigSource.of(self.PLUGIN_CONFIG),
+        config = confuse.RootView(sources=[
+            confuse.ConfigSource.of(self.PLUGIN_CONFIG),
         ])
 
         with unittest.mock.patch(
