@@ -78,6 +78,8 @@ class ExtraFilesPlugin(beets.plugins.BeetsPlugin):
 
         self._moved_items = set()
         self._copied_items = set()
+        self._linked_items = set()
+        self._hardlinked_items = set()
         self._reflinked_items = set()
         self._scanned_paths = set()
         self.path_formats = beets.ui.get_path_formats(self.config['paths'])
@@ -95,6 +97,14 @@ class ExtraFilesPlugin(beets.plugins.BeetsPlugin):
         """Run this listener function on item_copied events."""
         self._copied_items.add((item, source, destination))
 
+    def on_item_linked(self, item, source, destination):
+        """Run this listener function on item_linked events."""
+        self._linked_items.add((item, source, destination))
+
+    def on_item_hardlinked(self, item, source, destination):
+        """Run this listener function on item_hardlinked events."""
+        self._hardlinked_items.add((item, source, destination))
+
     def on_item_reflinked(self, item, source, destination):
         """Run this listener function on item_reflinked events."""
         self._reflinked_items.add((item, source, destination))
@@ -104,56 +114,66 @@ class ExtraFilesPlugin(beets.plugins.BeetsPlugin):
         files = self.gather_files(self._copied_items)
         self.process_items(files, action=self._copy_file)
 
+        files = self.gather_files(self._linked_items)
+        self.process_items(files, action=self._link_file)
+
+        files = self.gather_files(self._hardlinked_items)
+        self.process_items(files, action=self._hardlink_file)
+
         files = self.gather_files(self._reflinked_items)
         self.process_items(files, action=self._reflink_file)
 
         files = self.gather_files(self._moved_items)
         self.process_items(files, action=self._move_file)
 
-    def _copy_file(self, path, dest):
-        """Copy path to dest."""
-        self._log.info('Copying extra file: {0} -> {1}', path, dest)
+    def _handle_file(self, path, dest, operation=beets.util.MoveOperation.MOVE):
+        """copy, link or hardlink path to dest."""
+        self._log.info("{0}'ing extra file: {1} -> {2}", operation.name, path, dest)
+
+        if operation == beets.util.MoveOperation.COPY:
+            copy_function = beets.util.copy
+        elif operation == beets.util.MoveOperation.LINK:
+            copy_function = beets.util.link
+        elif operation == beets.util.MoveOperation.HARDLINK:
+            copy_function = beets.util.hardlink
+        elif operation == beets.util.MoveOperation.REFLINK:
+            copy_function = beets.util.reflink
+        else:
+            assert False, 'unknown MoveOperation'
+
         if os.path.isdir(path):
             if os.path.exists(dest):
                 raise beets.util.FilesystemError(
-                    'file exists', 'copy',
+                    'file exists', operation.name,
                     (path, dest),
                 )
 
             sourcepath = beets.util.displayable_path(path)
             destpath = beets.util.displayable_path(dest)
             try:
-                shutil.copytree(sourcepath, destpath)
+                shutil.copytree(sourcepath, destpath, copy_function=copy_function)
             except (OSError, IOError) as exc:
                 raise beets.util.FilesystemError(
-                    exc, 'copy', (path, dest),
+                    exc, operation.name, (path, dest),
                     traceback.format_exc(),
                 )
         else:
-            beets.util.copy(path, dest)
+            copy_function(path, dest)
+
+    def _copy_file(self, path, dest):
+        self._handle_file(path, dest, operation=beets.util.MoveOperation.COPY)
+
+    def _link_file(self, path, dest):
+        """Symlink path to dest."""
+        self._handle_file(path, dest, operation=beets.util.MoveOperation.LINK)
+
+    def _hardlink_file(self, path, dest):
+        """Hardlink path to dest."""
+        self._handle_file(path, dest, operation=beets.util.MoveOperation.HARDLINK)
 
     def _reflink_file(self, path, dest):
         """Reflink path to dest."""
-        self._log.info('Reflinking extra file: {0} -> {1}', path, dest)
-        if os.path.isdir(path):
-            if os.path.exists(dest):
-                raise beets.util.FilesystemError(
-                    'file exists', 'link',
-                    (path, dest),
-                )
-
-            sourcepath = beets.util.displayable_path(path)
-            destpath = beets.util.displayable_path(dest)
-            try:
-                shutil.copytree(sourcepath, destpath,
-                                copy_function=beets.util.reflink)
-            except (OSError, IOError) as exc:
-                raise beets.util.FilesystemError(
-                    exc, 'link', (path, dest),
-                    traceback.format_exc(),
-                )
-        else:
-            beets.util.reflink(path, dest)
+        self._handle_file(path, dest, operation=beets.util.MoveOperation.REFLINK)
 
     def _move_file(self, path, dest):
         """Move path to dest."""
