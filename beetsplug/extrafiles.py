@@ -6,6 +6,7 @@ import os
 import shutil
 import sys
 import traceback
+from pathlib import Path
 
 import mediafile
 import beets.dbcore.db
@@ -236,40 +237,37 @@ class ExtraFilesPlugin(beets.plugins.BeetsPlugin):
 
     def match_patterns(self, source, skip=set()):
         """Find all files matched by the patterns."""
-        source_path = beets.util.displayable_path(source)
+        source_path = Path(os.fsdecode(source))
 
         if source_path in skip:
             return
 
         for category, patterns in self.config['patterns'].get(dict).items():
             for pattern in patterns:
-                globpath = os.path.join(glob.escape(source_path), pattern)
-                for path in glob.iglob(globpath):
+                for path in source_path.glob(pattern):
                     # Skip special dot directories (just in case)
-                    if os.path.basename(path) in ('.', '..'):
+                    if str(path) in ('.', '..'):
                         continue
 
                     # Skip files handled by the beets media importer
-                    ext = os.path.splitext(path)[1]
+                    ext = path.suffix
                     if len(ext) > 1 and ext[1:] in mediafile.TYPES.keys():
                         self._log.info("file type handled by beets media importer: {0} skipping file: {1}", path.suffix, path)
                         continue
 
-                    yield (path, category)
+                    yield bytes(path), category
 
         skip.add(source_path)
 
     def get_destination(self, path, category, meta):
         """Get the destination path for a source file's relative path."""
-        pathsep = beets.config['path_sep_replace'].get(str)
-        strpath = beets.util.displayable_path(path)
-        old_basename, fileext = os.path.splitext(os.path.basename(strpath))
-        old_filename, _ = os.path.splitext(pathsep.join(strpath.split(os.sep)))
+        # Sanitize filename
+        dest_path = Path(beets.util.sanitize_path(os.fsdecode(path)))
 
         mapping = FormattedExtraFileMapping(
             ExtraFileModel(
-                basename=old_basename,
-                filename=old_filename,
+                basename=dest_path.name,
+                filename=dest_path.parent / dest_path.stem,
                 **meta
             ), for_path=True,
         )
@@ -285,11 +283,4 @@ class ExtraFilesPlugin(beets.plugins.BeetsPlugin):
 
         # Get template funcs and evaluate against mapping
         funcs = beets.library.DefaultTemplateFunctions().functions()
-        filepath = path_format.substitute(mapping, funcs) + fileext
-
-        # Sanitize filename
-        filename = beets.util.sanitize_path(os.path.basename(filepath))
-        dirname = os.path.dirname(filepath)
-        filepath = os.path.join(dirname, filename)
-
-        return filepath
+        return path_format.substitute(mapping, funcs) + dest_path.suffix
