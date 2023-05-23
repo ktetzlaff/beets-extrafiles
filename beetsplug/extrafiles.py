@@ -15,25 +15,6 @@ import beets.ui
 import beets.util.functemplate
 
 
-def commonpath(paths):
-    """Find longest common sub-path of each path in the sequence paths."""
-    # Typecast to list needed for Python version < 3.6
-    paths = list(paths)
-    if sys.version_info >= (3, 5):
-        return os.path.commonpath(paths)
-    else:
-        # os.path.commonpath does not exist in Python < 3.5
-        prefix = os.path.commonprefix(paths)
-
-        sep = os.sep.encode() if isinstance(prefix, bytes) else os.sep
-        prefix_split = prefix.split(sep)
-        path_split = paths[0].split(sep)
-        if path_split[:len(prefix_split)] != prefix_split:
-            prefix = os.path.dirname(prefix)
-
-        return prefix
-
-
 class FormattedExtraFileMapping(beets.dbcore.db.FormattedMapping):
     """Formatted Mapping that allows path separators for certain keys."""
 
@@ -230,8 +211,8 @@ class ExtraFilesPlugin(beets.plugins.BeetsPlugin):
             sourcedirs = set(os.path.dirname(f) for f in sources)
             destdirs = set(os.path.dirname(f) for f in destinations)
 
-            source = commonpath(sourcedirs)
-            destination = commonpath(destdirs)
+            source = os.path.commonpath(sourcedirs)
+            destination = os.path.commonpath(destdirs)
             self._log.debug(
                 '{0} -> {1} ({2.album} by {2.albumartist}, {3} tracks)',
                 source, destination, item, len(items),
