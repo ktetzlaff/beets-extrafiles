@@ -84,10 +84,17 @@ class ExtraFilesPlugin(beets.plugins.BeetsPlugin):
         self._scanned_paths = set()
         self.path_formats = beets.ui.get_path_formats(self.config['paths'])
 
+        self.register_listener('album_imported', self.on_album_imported)
         self.register_listener('item_moved', self.on_item_moved)
         self.register_listener('item_copied', self.on_item_copied)
+        self.register_listener('item_linked', self.on_item_linked)
+        self.register_listener('item_hardlinked', self.on_item_hardlinked)
         self.register_listener('item_reflinked', self.on_item_reflinked)
         self.register_listener('cli_exit', self.on_cli_exit)
+
+    def on_album_imported(self, lib, album):
+        """Run this listener function on album_imported events."""
+        self._log.info("[album_imported] lib: {0} album: {1}", lib, album)
 
     def on_item_moved(self, item, source, destination):
         """Run this listener function on item_moved events."""
@@ -128,9 +135,21 @@ class ExtraFilesPlugin(beets.plugins.BeetsPlugin):
 
     def _handle_file(self, path, dest, operation=beets.util.MoveOperation.MOVE):
         """copy, link or hardlink path to dest."""
-        self._log.info("{0}'ing extra file: {1} -> {2}", operation.name, path, dest)
+        self._log.info("[{0}] {1} -> {2}", operation.name, path, dest)
+        if os.path.samefile(path, dest):
+            self._log.info('Source {0} same as destination {1}, skipping', path, dest)
+            return
+        if os.path.exists(dest):
+            raise beets.util.FilesystemError('destination already exists', operation.name, (path, dest))
 
-        if operation == beets.util.MoveOperation.COPY:
+        if operation == beets.util.MoveOperation.MOVE:
+            # beets.util.move doesn't support moving directories
+            def copy_function(src, dst):
+                try:
+                    return os.replace(src, dst)
+                except (OSError, IOError) as exc_info:
+                    raise beets.util.FilesystemError(exc_info, operation.name, (path, dest), traceback.format_exc())
+        elif operation == beets.util.MoveOperation.COPY:
             copy_function = beets.util.copy
         elif operation == beets.util.MoveOperation.LINK:
             copy_function = beets.util.link
@@ -142,16 +161,8 @@ class ExtraFilesPlugin(beets.plugins.BeetsPlugin):
             assert False, 'unknown MoveOperation'
 
         if os.path.isdir(path):
-            if os.path.exists(dest):
-                raise beets.util.FilesystemError(
-                    'file exists', operation.name,
-                    (path, dest),
-                )
-
-            sourcepath = beets.util.displayable_path(path)
-            destpath = beets.util.displayable_path(dest)
             try:
-                shutil.copytree(sourcepath, destpath, copy_function=copy_function)
+                shutil.copytree(path, dest, copy_function=copy_function)
             except (OSError, IOError) as exc:
                 raise beets.util.FilesystemError(
                     exc, operation.name, (path, dest),
@@ -177,10 +188,7 @@ class ExtraFilesPlugin(beets.plugins.BeetsPlugin):
 
     def _move_file(self, path, dest):
         """Move path to dest."""
-        self._log.info('Moving extra file: {0} -> {1}', path, dest)
-        sourcepath = beets.util.displayable_path(path)
-        destpath = beets.util.displayable_path(dest)
-        shutil.move(sourcepath, destpath)
+        self._handle_file(path, dest, operation=beets.util.MoveOperation.MOVE)
 
     def process_items(self, files, action):
         """Move path to dest."""
@@ -242,6 +250,7 @@ class ExtraFilesPlugin(beets.plugins.BeetsPlugin):
                 path = beets.util.bytestring_path(path)
                 relpath = os.path.normpath(os.path.relpath(path, start=source))
                 destpath = self.get_destination(relpath, category, meta.copy())
+                self._log.info("{0} -> {1}", path, destpath)
                 yield path, destpath
 
     def match_patterns(self, source, skip=set()):
@@ -262,6 +271,7 @@ class ExtraFilesPlugin(beets.plugins.BeetsPlugin):
                     # Skip files handled by the beets media importer
                     ext = os.path.splitext(path)[1]
                     if len(ext) > 1 and ext[1:] in mediafile.TYPES.keys():
+                        self._log.info("file type handled by beets media importer: {0} skipping file: {1}", path.suffix, path)
                         continue
 
                     yield (path, category)
