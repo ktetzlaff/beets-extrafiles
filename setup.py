@@ -22,7 +22,6 @@ setup(
     url='https://github.com/Holzhaus/beets-extrafiles',
     license='MIT',
     packages=['beetsplug'],
-    namespace_packages=['beetsplug'],
     test_suite='tests',
     install_requires=[
         'beets>=1.4.7',
