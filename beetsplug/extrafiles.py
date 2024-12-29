@@ -125,8 +125,9 @@ class ExtraFilesPlugin(beets.plugins.BeetsPlugin):
         dest_path = Path(os.fsdecode(dest))
         self._reflinked_items.add((item, src_path, dest_path))
 
-    def on_cli_exit(self, _lib: Library | None) -> None:
+    def on_cli_exit(self, lib: Library | None) -> None:
         """Run this listener function when the CLI exits."""
+        del lib
         files = self.gather_files(self._copied_items)
         self.process_items(files, action=self._copy_file)
 
