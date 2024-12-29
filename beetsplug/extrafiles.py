@@ -48,7 +48,7 @@ class FormattedExtraFileMapping(beets.dbcore.db.FormattedMapping):
 class ExtraFileModel(beets.dbcore.db.Model):
     """Model for a  FormattedExtraFileMapping instance."""
 
-    _fields = {
+    _fields: dict[str, beets.dbcore.types.Type] = {  # noqa: RUF012
         "artist": beets.dbcore.types.STRING,
         "albumartist": beets.dbcore.types.STRING,
         "album": beets.dbcore.types.STRING,
@@ -125,7 +125,7 @@ class ExtraFilesPlugin(beets.plugins.BeetsPlugin):
         dest_path = Path(os.fsdecode(dest))
         self._reflinked_items.add((item, src_path, dest_path))
 
-    def on_cli_exit(self, _lib: Library) -> None:
+    def on_cli_exit(self, _lib: Library | None) -> None:
         """Run this listener function when the CLI exits."""
         files = self.gather_files(self._copied_items)
         self.process_items(files, action=self._copy_file)
@@ -150,28 +150,15 @@ class ExtraFilesPlugin(beets.plugins.BeetsPlugin):
     ) -> None:
         """copy, link or hardlink path to dest."""
         self._log.info("[{0}] {1} -> {2}", operation.name, path, dest)
-        if path.samefile(dest):
-            self._log.info("Source {0} same as destination {1}", path, dest)
-            return
 
         if dest.exists():
+            if path.samefile(dest):
+                self._log.info("Source {0} same as destination {1}", path, dest)
+                return
             raise FilesystemError("destination already exists", operation.name, (path, dest))
 
         if operation == MoveOperation.MOVE:
-            # beets.util.move doesn't support moving directories
-            def copy_function(src: str | Path, dst: str | Path) -> None:
-                try:
-                    Path(src).replace(dst)
-                except OSError as err:
-                    raise FilesystemError(
-                        err,
-                        operation.name,
-                        (path, dest),
-                        traceback.format_exc(),
-                    ) from err
-                else:
-                    return
-
+            copy_function = beets.util.move
         elif operation == MoveOperation.COPY:
             copy_function = beets.util.copy
         elif operation == MoveOperation.LINK:
@@ -185,11 +172,15 @@ class ExtraFilesPlugin(beets.plugins.BeetsPlugin):
 
         if path.is_dir():
             try:
-                shutil.copytree(path, dest, copy_function=copy_function)
+                if operation == MoveOperation.MOVE:
+                    shutil.move(path, dest, copy_function=copy_function)  # type: ignore[arg-type]
+                else:
+                    shutil.copytree(path, dest, copy_function=copy_function)  # type: ignore[arg-type]
+
             except OSError as exc:
                 raise FilesystemError(exc, operation.name, (path, dest), traceback.format_exc()) from exc
         else:
-            copy_function(path, dest)
+            _ = copy_function(bytes(path), bytes(dest))
 
     def _copy_file(self, path: Path, dest: Path) -> None:
         self._handle_file(path, dest, operation=MoveOperation.COPY)
@@ -228,9 +219,9 @@ class ExtraFilesPlugin(beets.plugins.BeetsPlugin):
                 )
                 continue
 
-            dest_path = Path(beets.util.unique_path(destination))
+            dest_path = Path(os.fsdecode(beets.util.unique_path(bytes(destination))))
             # TODO: remove?
-            beets.util.mkdirall(dest_path)
+            beets.util.mkdirall(bytes(dest_path))
 
             try:
                 action(source, dest_path)
@@ -285,12 +276,14 @@ class ExtraFilesPlugin(beets.plugins.BeetsPlugin):
                 self._log.info("{0} -> {1}", path, destpath)
                 yield path, destpath
 
-    def match_patterns(self, source: Path, skip: set[Path]) -> Iterator[tuple[Path, str]]:
+    def match_patterns(self, source: Path, skip: set[Path] | None = None) -> Iterator[tuple[Path, str]]:
         """Find all files matched by the patterns."""
-        if source in skip:
+        if skip is None:
+            skip = set()
+        elif source in skip:
             return
 
-        for category, patterns in self.config["patterns"].get(dict).items():
+        for category, patterns in self.config["patterns"].get(dict).items():  # type: ignore[generic]
             for pattern in patterns:
                 for path in source.glob(pattern):
                     # Skip special dot directories (just in case)
@@ -311,7 +304,7 @@ class ExtraFilesPlugin(beets.plugins.BeetsPlugin):
 
         skip.add(source)
 
-    def get_destination(self, path: str, category: str, meta: Mapping[str, str]) -> Path:
+    def get_destination(self, path: str, category: str, meta: Mapping) -> Path:
         """Get the destination path for a source file's relative path."""
         # Sanitize filename
         dest_path = Path(beets.util.sanitize_path(os.fsdecode(path)))
