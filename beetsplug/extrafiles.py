@@ -95,34 +95,34 @@ class ExtraFilesPlugin(beets.plugins.BeetsPlugin):
         """Run this listener function on album_imported events."""
         self._log.info("[album_imported] lib: {0} album: {1}", lib, album)
 
-    def on_item_moved(self, item: Item, src: bytes, dest: bytes) -> None:
+    def on_item_moved(self, item: Item, source: bytes, destination: bytes) -> None:
         """Run this listener function on item_moved events."""
-        src_path = Path(os.fsdecode(src))
-        dest_path = Path(os.fsdecode(dest))
+        src_path = Path(os.fsdecode(source))
+        dest_path = Path(os.fsdecode(destination))
         self._moved_items.add((item, src_path, dest_path))
 
-    def on_item_copied(self, item: Item, src: bytes, dest: bytes) -> None:
+    def on_item_copied(self, item: Item, source: bytes, destination: bytes) -> None:
         """Run this listener function on item_copied events."""
-        src_path = Path(os.fsdecode(src))
-        dest_path = Path(os.fsdecode(dest))
+        src_path = Path(os.fsdecode(source))
+        dest_path = Path(os.fsdecode(destination))
         self._copied_items.add((item, src_path, dest_path))
 
-    def on_item_linked(self, item: Item, src: bytes, dest: bytes) -> None:
+    def on_item_linked(self, item: Item, source: bytes, destination: bytes) -> None:
         """Run this listener function on item_linked events."""
-        src_path = Path(os.fsdecode(src))
-        dest_path = Path(os.fsdecode(dest))
+        src_path = Path(os.fsdecode(source))
+        dest_path = Path(os.fsdecode(destination))
         self._linked_items.add((item, src_path, dest_path))
 
-    def on_item_hardlinked(self, item: Item, src: bytes, dest: bytes) -> None:
+    def on_item_hardlinked(self, item: Item, source: bytes, destination: bytes) -> None:
         """Run this listener function on item_hardlinked events."""
-        src_path = Path(os.fsdecode(src))
-        dest_path = Path(os.fsdecode(dest))
+        src_path = Path(os.fsdecode(source))
+        dest_path = Path(os.fsdecode(destination))
         self._hardlinked_items.add((item, src_path, dest_path))
 
-    def on_item_reflinked(self, item: Item, src: bytes, dest: bytes) -> None:
+    def on_item_reflinked(self, item: Item, source: bytes, destination: bytes) -> None:
         """Run this listener function on item_reflinked events."""
-        src_path = Path(os.fsdecode(src))
-        dest_path = Path(os.fsdecode(dest))
+        src_path = Path(os.fsdecode(source))
+        dest_path = Path(os.fsdecode(destination))
         self._reflinked_items.add((item, src_path, dest_path))
 
     def on_cli_exit(self, lib: Library | None) -> None:
