@@ -286,6 +286,9 @@ class ExtraFilesPlugin(beets.plugins.BeetsPlugin):
 
         for category, patterns in self.config["patterns"].get(dict).items():  # type: ignore[generic]
             for pattern in patterns:
+                # handle special case where patterns dictionary is a simple string instead of a list
+                if isinstance(patterns, str):
+                    patterns = [ patterns ]
                 for path in source.glob(pattern):
                     # Skip special dot directories (just in case)
                     if str(path) in (".", ".."):
